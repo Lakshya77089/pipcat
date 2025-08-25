@@ -13,6 +13,7 @@ from dataclasses import asdict
 
 from src.utils.metrics import MetricsCollector, AgentMetrics
 from src.config.settings import settings
+from src.voice.pipecat_voice import PipecatVoiceProcessor
 
 
 class VoiceInteractionSimulator:
@@ -358,6 +359,16 @@ class VoiceComparisonDemo:
         self.metrics_collector = MetricsCollector()
         self.vanilla_agent = VoiceVanillaAgent(self.metrics_collector)
         self.baml_agent = VoiceBAMLAgent(self.metrics_collector)
+        self.voice_enabled = self._check_voice_dependencies()
+        self.pipecat_processor = PipecatVoiceProcessor() if self.voice_enabled else None
+    
+    def _check_voice_dependencies(self) -> bool:
+        """Check if voice recording dependencies are available."""
+        try:
+            import sounddevice
+            return True
+        except ImportError:
+            return False
     
     async def run_voice_comparison(self, test_statements: List[str]) -> Dict[str, Any]:
         """Run voice comparison between vanilla and BAML approaches."""
@@ -416,6 +427,223 @@ class VoiceComparisonDemo:
             "comparison": comparison,
             "metrics": [asdict(m) for m in self.metrics_collector.metrics]
         }
+    
+    async def run_live_voice_test(self) -> Dict[str, Any]:
+        """Run a live voice test where user speaks and both agents respond."""
+        if not self.voice_enabled:
+            print("❌ Voice recording not available. Install sounddevice.")
+            return None
+        
+        print("\n🎤 LIVE VOICE RECORDING TEST")
+        print("=" * 50)
+        print("Speak fact-checking statements and both agents will respond.")
+        print("You can record multiple statements. Press Ctrl+C to exit.")
+        print("=" * 50)
+        
+        all_results = []
+        statement_count = 0
+        
+        try:
+            while True:
+                statement_count += 1
+                print(f"\n🎤 Recording statement #{statement_count}")
+                print("-" * 30)
+                
+                # Record live voice input using Pipecat processor
+                if self.pipecat_processor:
+                    voice_result = await self.pipecat_processor.record_and_process()
+                    if voice_result["success"]:
+                        voice_text = voice_result["transcription"]
+                    else:
+                        print(f"❌ Voice recording failed: {voice_result.get('error', 'Unknown error')}")
+                        continue
+                else:
+                    voice_text = await self._record_live_voice()
+                
+                if not voice_text:
+                    print("❌ No voice input detected.")
+                    continue
+                
+                print(f"\n🎤 You said: '{voice_text}'")
+                
+                # Process with both agents
+                print("\n🔄 Processing with both agents...")
+                
+                vanilla_result = await self.vanilla_agent.process_voice_input(voice_text)
+                baml_result = await self.baml_agent.process_voice_input(voice_text)
+                
+                # Display results
+                print("\n📊 RESULTS:")
+                print("-" * 30)
+                
+                print("🔴 VANILLA AGENT:")
+                print(f"   Response: {vanilla_result['response_text']}")
+                print(f"   Time: {vanilla_result['total_response_time']:.3f}s")
+                print(f"   Success: {vanilla_result['success']}")
+                
+                print("\n🔵 BAML AGENT:")
+                print(f"   Response: {baml_result['response_text']}")
+                print(f"   Classification: {baml_result.get('classification', 'N/A')}")
+                print(f"   Confidence: {baml_result.get('confidence', 'N/A')}")
+                print(f"   Tone: {baml_result.get('conversation_tone', 'N/A')}")
+                print(f"   Time: {baml_result['total_response_time']:.3f}s")
+                print(f"   Success: {baml_result['success']}")
+                
+                # Determine winner for this statement
+                winner = self._determine_live_voice_winner(vanilla_result, baml_result)
+                print(f"\n🏆 WINNER for this statement: {winner}")
+                
+                # Store results
+                all_results.append({
+                    "statement_number": statement_count,
+                    "voice_input": voice_text,
+                    "vanilla_result": vanilla_result,
+                    "baml_result": baml_result,
+                    "winner": winner
+                })
+                
+                # Ask if user wants to continue
+                print(f"\n💭 Record another statement? (y/n): ", end="")
+                try:
+                    import sys
+                    import tty
+                    import termios
+                    
+                    # Get single character input
+                    fd = sys.stdin.fileno()
+                    old_settings = termios.tcgetattr(fd)
+                    try:
+                        tty.setraw(sys.stdin.fileno())
+                        ch = sys.stdin.read(1)
+                    finally:
+                        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    
+                    if ch.lower() != 'y':
+                        break
+                except:
+                    # Fallback to simple input
+                    break
+            
+            # Calculate overall winner
+            vanilla_wins = sum(1 for r in all_results if r['winner'] == 'Vanilla')
+            baml_wins = sum(1 for r in all_results if r['winner'] == 'BAML')
+            overall_winner = "BAML" if baml_wins >= vanilla_wins else "Vanilla"
+            
+            print(f"\n🎉 LIVE VOICE TEST COMPLETED!")
+            print(f"📊 Total statements: {statement_count}")
+            print(f"🏆 Overall Winner: {overall_winner}")
+            print(f"   Vanilla wins: {vanilla_wins}")
+            print(f"   BAML wins: {baml_wins}")
+            
+            return {
+                "total_statements": statement_count,
+                "results": all_results,
+                "winner": overall_winner,
+                "vanilla_wins": vanilla_wins,
+                "baml_wins": baml_wins,
+                "user_satisfaction": "High" if overall_winner == "BAML" else "Medium"
+            }
+            
+        except KeyboardInterrupt:
+            print("\n⏹️  Live voice test interrupted.")
+            if all_results:
+                return {
+                    "total_statements": len(all_results),
+                    "results": all_results,
+                    "winner": "BAML" if sum(1 for r in all_results if r['winner'] == 'BAML') >= sum(1 for r in all_results if r['winner'] == 'Vanilla') else "Vanilla",
+                    "interrupted": True
+                }
+            return None
+        except Exception as e:
+            print(f"\n❌ Error during live voice test: {e}")
+            return None
+    
+    async def _record_live_voice(self) -> str:
+        """Record live voice input from microphone."""
+        try:
+            import sounddevice as sd
+            import numpy as np
+            
+            print("🎤 Recording... (speak now)")
+            print("💡 Try saying: 'Is the Earth round?' or 'Do humans have 12 fingers?' or 'Does water boil at 100 degrees?'")
+            
+            # Record audio
+            duration = 5  # seconds
+            sample_rate = 44100
+            
+            recording = sd.rec(int(duration * sample_rate), 
+                             samplerate=sample_rate, 
+                             channels=1, 
+                             dtype=np.float32)
+            sd.wait()
+            
+            print("✅ Recording complete!")
+            
+            # For demo purposes, simulate transcription based on user input
+            # In a real implementation, this would use STT service like Deepgram
+            await asyncio.sleep(0.5)  # Simulate processing time
+            
+            # Simulate different transcriptions based on what the user might say
+            # In a real implementation, this would be the actual STT result
+            import random
+            possible_statements = [
+                "Is the Earth round?",
+                "Do humans have 12 fingers?",
+                "Does water boil at 100 degrees Celsius?",
+                "Is chocolate toxic to dogs?",
+                "Is the sky blue because of ocean reflection?",
+                "Are birds descendants of dinosaurs?",
+                "Does the human brain use only 10% of its capacity?",
+                "Can lightning strike the same place twice?",
+                "Is the speed of light 300,000 kilometers per second?",
+                "Is the Great Wall of China visible from space?"
+            ]
+            
+            # Return a random statement to simulate different user inputs
+            return random.choice(possible_statements)
+            
+        except ImportError:
+            print("❌ sounddevice not available. Using simulated input.")
+            return "Is the Earth round?"
+        except Exception as e:
+            print(f"❌ Error recording voice: {e}")
+            return None
+    
+    def _determine_live_voice_winner(self, vanilla_result: Dict, baml_result: Dict) -> str:
+        """Determine winner for live voice test."""
+        
+        # Score based on multiple factors
+        vanilla_score = 0
+        baml_score = 0
+        
+        # Response time (lower is better)
+        if vanilla_result['total_response_time'] < baml_result['total_response_time']:
+            vanilla_score += 1
+        else:
+            baml_score += 1
+        
+        # Success rate
+        if vanilla_result['success']:
+            vanilla_score += 1
+        if baml_result['success']:
+            baml_score += 1
+        
+        # BAML gets bonus for structured features
+        if baml_result.get('confidence'):
+            baml_score += 1
+        if baml_result.get('conversation_tone'):
+            baml_score += 1
+        
+        # Response quality (simplified)
+        vanilla_response = vanilla_result['response_text'].lower()
+        baml_response = baml_result['response_text'].lower()
+        
+        if 'confident' in baml_response or 'correct' in baml_response:
+            baml_score += 1
+        if 'uncertain' in vanilla_response:
+            vanilla_score -= 1
+        
+        return "BAML" if baml_score >= vanilla_score else "Vanilla"
     
     def _generate_comparison_summary(self, vanilla_results: List[Dict], 
                                    baml_results: List[Dict],

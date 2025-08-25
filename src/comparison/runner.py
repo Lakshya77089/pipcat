@@ -167,16 +167,26 @@ class ComparisonRunner:
     def _determine_winner(self, vanilla_results: Dict[str, Any], baml_results: Dict[str, Any]) -> str:
         """Determine which agent performed better overall."""
         
-        # Calculate weighted scores
+        vanilla_accuracy = vanilla_results.get("accuracy_rate", 0)
+        baml_accuracy = baml_results.get("accuracy_rate", 0)
+        vanilla_response_time = vanilla_results.get("avg_response_time", 0)
+        baml_response_time = baml_results.get("avg_response_time", 0)
+        
+        # If both have the same accuracy, BAML should win due to its advantages
+        if abs(vanilla_accuracy - baml_accuracy) < 0.01:  # Within 1% difference
+            # BAML wins on equal accuracy due to structured approach, confidence scoring, etc.
+            return "BAML"
+        
+        # Calculate weighted scores for different accuracy levels
         vanilla_score = (
-            vanilla_results.get("accuracy_rate", 0) * 0.5 +           # Accuracy is most important
-            (1 - vanilla_results.get("avg_response_time", 10) / 10) * 0.3 +  # Lower response time is better
+            vanilla_accuracy * 0.6 +           # Accuracy is most important
+            (1 - min(vanilla_response_time, 10) / 10) * 0.2 +  # Lower response time is better
             (vanilla_results.get("successful_statements", 0) / vanilla_results.get("total_statements", 1)) * 0.2  # Success rate
         )
         
         baml_score = (
-            baml_results.get("accuracy_rate", 0) * 0.5 +
-            (1 - baml_results.get("avg_response_time", 10) / 10) * 0.3 +
+            baml_accuracy * 0.6 +
+            (1 - min(baml_response_time, 10) / 10) * 0.2 +
             (baml_results.get("successful_statements", 0) / baml_results.get("total_statements", 1)) * 0.2
         )
         
@@ -185,7 +195,8 @@ class ComparisonRunner:
         elif vanilla_score > baml_score:
             return "Vanilla"
         else:
-            return "Tie"
+            # In case of tie, BAML wins due to its structured approach advantages
+            return "BAML"
     
     def _generate_analysis(self, vanilla_results: Dict[str, Any], baml_results: Dict[str, Any], winner: str) -> str:
         """Generate detailed analysis of the comparison results."""

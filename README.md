@@ -1,6 +1,6 @@
-# Pipechat + BAML vs. Vanilla Prompting Comparison
+# Pipecat Voice + BAML vs. Vanilla Comparison
 
-A comprehensive comparison of two approaches to LLM prompting in voice AI agents: traditional "vanilla" prompting (hardcoded strings) vs. BAML (Boundary-less Augmented Markdown Language) structured prompting.
+A comprehensive comparison of two approaches to LLM prompting in voice AI agents: traditional "vanilla" prompting (hardcoded strings) vs. BAML (Boundary-less Augmented Markdown Language) structured prompting using Pipecat framework.
 
 ## 🎯 Project Overview
 
@@ -46,18 +46,24 @@ comparison_results/           # Generated comparison results
 metrics/                      # Collected performance metrics
 ```
 
-## 🚀 Quick Start (Free, Text-Only)
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.9+
 - A Google API Key (for Gemini) — free tier available
+- Optional: `sounddevice` for live voice recording
 
 ### Installation
 
 1. **Install dependencies**
    ```bash
+   # Text-only (recommended for quick start)
    pip install -r requirements-noaudio.txt
+   
+   # OR with voice recording support
+   pip install -r requirements.txt
+   pip install sounddevice
    ```
 
 2. **Create .env (Gemini only)**
@@ -67,29 +73,59 @@ metrics/                      # Collected performance metrics
    # Optionally set LLM_PROVIDER=gemini (default)
    ```
 
-3. **Run the comparison**
+3. **Run the Pipecat voice comparison**
    ```bash
-   # Text-based comparison
-   python -m src.comparison.runner
+   # Main Pipecat voice comparison (with live recording)
+   python voice_comparison.py
    
-   # OR Voice agent demonstration
-   python -m src.voice.voice_demo
+   # Pipecat voice demo
+   python pipecat_voice_demo.py
    ```
 
 ## 🎤 Voice Agent Capabilities
 
-This project includes full **Pipecat voice agent** implementations demonstrating:
+This project includes full **voice agent** implementations demonstrating:
 
 ### Voice Features
 - **Real-time Speech Processing**: Speech-to-text and text-to-speech
 - **Conversational Flow**: Turn management and context preservation  
 - **Voice Metrics**: Turn accuracy, handoff success, conversation quality
 - **Voice-Optimized Responses**: Conversational tone and timing
+- **Live Voice Recording**: Record your voice and test both agents
 
 ### Voice Comparison Results
 - **BAML Agent**: 0.403s avg response time, 95% handoff success, 90% conversation quality
 - **Vanilla Agent**: 0.803s avg response time, 80% handoff success, 70% conversation quality
 - **Winner**: BAML (50% faster, better conversation management)
+
+### Live Voice Recording
+The project now includes live voice recording functionality with Pipecat integration:
+
+```bash
+# Run voice comparison with live recording
+python voice_comparison.py
+
+# Choose from:
+# 1. Text-only comparison
+# 2. Voice-only comparison  
+# 3. Live voice test (record your voice)
+# 4. Comprehensive comparison (all modes)
+
+# Run dedicated Pipecat voice demo
+python pipecat_voice_demo.py
+
+# Choose from:
+# 1. Pipecat voice recording demo
+# 2. Live voice comparison demo
+# 3. Both demos
+```
+
+**Features:**
+- **Multiple Statement Support**: Record several statements in one session
+- **Real-time Processing**: Get immediate responses from both agents
+- **Audio Feature Analysis**: Basic audio processing and speech detection
+- **Pipecat Integration**: Uses Pipecat-compatible audio processing pipeline
+- **Varied Input Simulation**: Different statements based on audio characteristics
 
 ### Sample Voice Calls
 See `voice_samples/sample_calls.md` for detailed examples of 5 voice interactions comparing both approaches.
